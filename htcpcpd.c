@@ -79,7 +79,7 @@ char* handleHeaders(char *request)
     }
     else if(strcmp(method, "PROPFIND") == 0)
     {
-        //you want some metadata m8?
+        //server metadata
         if(potinfo.ready == 1)
         {
             return("HTCPCP/1.0 200 OK\nContent-type: message/coffeepot\nPot ready to brew");
