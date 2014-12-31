@@ -176,7 +176,19 @@ int main(int argc, char *argv[])
                         //half hour
                         digitalWrite(0, LOW);
                     }
-                    if(time(NULL) > blink)
+                    if(time(NULL) - potcpy.lastbrew >= 1800 && time(NULL) > blink)
+                    {
+                        if(digitalRead(3) == HIGH)
+                        {
+                            digitalWrite(3, LOW);
+                        }
+                        else if(digitalRead(3) == LOW)
+                        {
+                            digitalWrite(3, HIGH);
+                        }
+                        blink = time(NULL);
+                    }
+                    else if(time(NULL) > blink + 4)
                     {
                         if(digitalRead(3) == HIGH)
                         {
