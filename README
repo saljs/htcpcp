@@ -9,3 +9,13 @@ To compile:
     
 To connect to the server compile the coffee binary and run:
     coffee <host> <port> [Message]
+
+Example server config file `/etc/htcpcp.conf`
+```
+#HTCPCP conf file
+time_to_brew = 1800
+port = 80
+relay_pin = 0
+button_pin = 2
+led_pin = 3
+```
