@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
     {
         //read fom conf file
         FILE* confile = fopen("/etc/htcpcp.conf", "r");
-        char* tmp;
+        char tmp[255];
         while(fgets(tmp, sizeof(tmp), confile) != NULL)
         {
             //ignore comments
@@ -150,17 +150,19 @@ int main(int argc, char *argv[])
             }
             else
             {
+                char* var;
+                char* val;
+                char* token;
                 //get the variable being set
-                char *var = strtok(tmp, "=");
+                token = strtok(tmp, "=");
+                var = token;
                 //get the value it's being set to
-                char *val = strtok(tmp, "=");
+                token = strtok(NULL, "=");
+                val = token;
                 //set it
                 setVars(var, val);
-                free(var);
-                free(val);
             }
         }
-        free(tmp);
         fclose(confile);
     }
     
