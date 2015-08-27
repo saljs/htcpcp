@@ -5,12 +5,16 @@ HYPER TEXT COFFEE POT CONTROL PROTOCOL (HTCPCP/1.0)
 HTCPCP is a protocol for the control of coffee pots over the internet. This is an implementation whipped up in C for the Raspberry Pi. It's been tested with Arch Linux on a model B Revision 1 board, but should work on any board with WiringPi installed. 
 
 To compile:
+```
     make && make install
+```
     
 To connect to the server compile the coffee binary and run:
+```
     coffee <host> <port> [Message]
+```
 
-Example server config file `/etc/htcpcp.conf`
+Example server config file `/etc/htcpcp.conf`:
 ```
 #HTCPCP conf file
 time_to_brew = 1800
