@@ -140,8 +140,8 @@ int main(int argc, char *argv[])
     {
         //read fom conf file
         FILE* confile = fopen("/etc/htcpcp.conf", "r");
-        char tmp[255];
-        while(fgets(&tmp, sizeof(tmp), confile) != NULL)
+        char* tmp;
+        while(fgets(tmp, sizeof(tmp), confile) != NULL)
         {
             //ignore comments
             if(tmp[0] == '#')
@@ -156,8 +156,12 @@ int main(int argc, char *argv[])
                 char *val = strtok(tmp, "=");
                 //set it
                 setVars(var, val);
+                free(var);
+                free(val);
             }
         }
+        free(tmp);
+        fclose(confile);
     }
     
     sleep(30); //dirty hack to make sure WiFi is on before the program starts when using Systemd unit file
