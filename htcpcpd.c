@@ -132,7 +132,7 @@ void setVars(char* var, char* val)
 void* hardwareHandler(void* arg)
 {
     time_t blink = time(NULL);
-	for(;;)
+    for(;;)
     {
         if(closeThread == 1)
         {
@@ -276,9 +276,10 @@ int main(int argc, char *argv[])
     pinMode (led_pin, OUTPUT);
     digitalWrite(led_pin, HIGH);  //turn on the indicator LED
     
-    pthread_create(&HWThread, NULL, hardwareHandler, NULL);
     //daemonize process
     daemon(1, 0);
+    pthread_create(&HWThread, NULL, hardwareHandler, NULL);
+    
     for(;;)  //listen for connections
     {
         listen(sockfd, 5);
