@@ -27,15 +27,12 @@ int sockfd;
 
 void sig_handler(int signo)  //terminate gracefully
 {
-    if (signo == SIGINT || signo == SIGQUIT || signo == SIGTERM)
-    {
-        closeThread = 1;
-        close(sockfd);
-        pthread_join(HWThread, NULL);
-        digitalWrite(led_pin, LOW);
-        digitalWrite(relay_pin, LOW);
-        exit(0);
-    }
+    closeThread = 1;
+    close(sockfd);
+    pthread_join(HWThread, NULL);
+    digitalWrite(led_pin, LOW);
+    digitalWrite(relay_pin, LOW);
+    exit(0);
 }
 
 typedef struct
@@ -134,6 +131,7 @@ void setVars(char* var, char* val)
 
 void* hardwareHandler(void* arg)
 {
+    time_t blink = time(NULL);
 	for(;;)
     {
         if(closeThread == 1)
