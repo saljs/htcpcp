@@ -277,6 +277,8 @@ int main(int argc, char *argv[])
     digitalWrite(led_pin, HIGH);  //turn on the indicator LED
     
     pthread_create(&HWThread, NULL, hardwareHandler, NULL);
+    //daemonize process
+    daemon(1, 0);
     for(;;)  //listen for connections
     {
         listen(sockfd, 5);
