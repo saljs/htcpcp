@@ -10,12 +10,8 @@
 #include <time.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <wiringPi.h>
-
-
-pid_t* pidchild;
-int* sock1;
-int* sock2;
 
 //set user-set variables
 int time_to_brew = 1800;
@@ -24,13 +20,18 @@ int relay_pin = 0;
 int button_pin = 2;
 int led_pin = 3;
 
+//some variables that need to be global for the signal handler to read
+unsigned short int closeThread = 0;
+pthread_t HWThread;
+int sockfd;
+
 void sig_handler(int signo)  //terminate gracefully
 {
-    if (signo == SIGINT || signo == SIGTERM)
+    if (signo == SIGINT || signo == SIGQUIT || signo == SIGTERM)
     {
-        kill(*pidchild, SIGQUIT);
-        close(*sock1);
-        close(*sock2);
+        closeThread = 1;
+        close(sockfd);
+        pthread_join(HWThread, NULL);
         digitalWrite(led_pin, LOW);
         digitalWrite(relay_pin, LOW);
         exit(0);
@@ -57,6 +58,7 @@ int brew(void)
     }
     return 1;
 }
+
 void error(const char *msg)
 {
     perror(msg);
@@ -130,7 +132,78 @@ void setVars(char* var, char* val)
     }
 }
 
+void* hardwareHandler(void* arg)
+{
+	for(;;)
+    {
+        if(closeThread == 1)
+        {
+            break;
+        }
+        if(potinfo.ready == 0)
+        {
+            //pot is brewing
+            if(time(NULL) - potinfo.lastbrew >= time_to_brew)
+            {
+                //half hour
+                digitalWrite(relay_pin, LOW);
+            }
+            if(time(NULL) - potinfo.lastbrew >= time_to_brew && time(NULL) > blink)
+            {
+                if(digitalRead(led_pin) == HIGH)
+                {
+                    digitalWrite(led_pin, LOW);
+                }
+                else if(digitalRead(led_pin) == LOW)
+                {
+                    digitalWrite(led_pin, HIGH);
+                }
+                blink = time(NULL);
+            }
+            else if(time(NULL) > blink + 4)
+            {
+                if(digitalRead(led_pin) == HIGH)
+                {
+                    digitalWrite(led_pin, LOW);
+                }
+                else if(digitalRead(led_pin) == LOW)
+                {
+                    digitalWrite(led_pin, HIGH);
+                }
+                blink = time(NULL);
+            }
+        }
+        else
+        {
+            digitalWrite(led_pin, HIGH);
+        }
 
+        if(digitalRead(button_pin) == HIGH)
+        {
+            sleep(3);
+            if(potinfo.ready == 0 && time(NULL) - potinfo.lastbrew >= time_to_brew)
+            {
+                potinfo.ready = 1;
+            }
+            else if(digitalRead(button_pin) == HIGH)
+            {
+                //shutdown
+                system("/usr/bin/poweroff");
+            }
+            else
+            {
+                potinfo.ready = 0;
+                potinfo.lastbrew = time(NULL);
+                //brew coffee
+                digitalWrite(relay_pin, HIGH);
+            }
+        }
+        //wait 10 microsenconds before checking everything again so the CPU doesn't max out
+        delay(10);
+    }
+    pthread_exit(NULL);
+}
+		
 int main(int argc, char *argv[])
 {
     printf("HTCPCP/1.0 server starting\n");
@@ -169,9 +242,8 @@ int main(int argc, char *argv[])
     sleep(30); //dirty hack to make sure WiFi is on before the program starts when using Systemd unit file
     potinfo.ready = 1;
     potinfo.lastbrew = time(NULL);
-    int sockfd, newsockfd;
-    sock1 = &sockfd;
-    sock2 = &newsockfd;
+    
+    int newsockfd;
     socklen_t clilen;
     char buffer[256];
     struct sockaddr_in serv_addr, cli_addr;
@@ -197,142 +269,39 @@ int main(int argc, char *argv[])
     }
 
     signal(SIGINT, sig_handler);
-    signal(SIGCHLD,SIG_IGN);
+    signal(SIGQUIT, sig_handler);
+    signal(SIGTERM, sig_handler);
     //setup the GPIO pins 
     wiringPiSetup();
     pinMode (relay_pin, OUTPUT);
     pinMode (button_pin, INPUT);
     pinMode (led_pin, OUTPUT);
     digitalWrite(led_pin, HIGH);  //turn on the indicator LED
-    //threading time
-    pid_t childPID;
-    int var_lcl = 0;
-
-    int fd[2];
-    pipe(fd);
-    fcntl(fd[0], F_SETFL, O_NONBLOCK);
-
-    int potRed[2];
-    pipe(potRed);
-    fcntl(potRed[0], F_SETFL, O_NONBLOCK);
-    fcntl(potRed[1], F_SETFL, O_NONBLOCK);
-    childPID = fork();
-
-    if(childPID >= 0) // fork was successful
+    
+    pthread_create(&HWThread, NULL, hardwareHandler, NULL);
+    for(;;)  //listen for connections
     {
-        daemon(0, 0);
-        if(childPID == 0) // child process
+        listen(sockfd, 5);
+        clilen = sizeof(cli_addr);
+        newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
+        if (newsockfd < 0)
         {
-            close(fd[1]);
-            close(potRed[0]);
-            pot potcpy;
-            potcpy.ready = 1;
-            time_t blink = time(NULL);
-            while( 0 == 0 )
-            {
-                //check shutdown, ready
-                read(fd[0], &potcpy, sizeof(pot));
-                if(potcpy.ready == 0)
-                {
-                    //pot is brewing
-                    if(time(NULL) - potcpy.lastbrew >= time_to_brew)
-                    {
-                        //half hour
-                        digitalWrite(relay_pin, LOW);
-                    }
-                    if(time(NULL) - potcpy.lastbrew >= time_to_brew && time(NULL) > blink)
-                    {
-                        if(digitalRead(led_pin) == HIGH)
-                        {
-                            digitalWrite(led_pin, LOW);
-                        }
-                        else if(digitalRead(led_pin) == LOW)
-                        {
-                            digitalWrite(led_pin, HIGH);
-                        }
-                        blink = time(NULL);
-                    }
-                    else if(time(NULL) > blink + 4)
-                    {
-                        if(digitalRead(led_pin) == HIGH)
-                        {
-                            digitalWrite(led_pin, LOW);
-                        }
-                        else if(digitalRead(led_pin) == LOW)
-                        {
-                            digitalWrite(led_pin, HIGH);
-                        }
-                        blink = time(NULL);
-                    }
-                }
-                else
-                {
-                    digitalWrite(led_pin, HIGH);
-                }
-
-                if(digitalRead(button_pin) == HIGH)
-                {
-                    sleep(3);
-                    if(potcpy.ready == 0 && time(NULL) - potcpy.lastbrew >= time_to_brew)
-                    {
-                        potcpy.ready = 1;
-                        write(potRed[1], &potcpy, sizeof(pot));
-                    }
-                    else if(digitalRead(button_pin) == HIGH)
-                    {
-                        //shutdown
-                        system("/usr/bin/poweroff");
-                    }
-                    else
-                    {
-                        potcpy.ready = 0;
-                        potcpy.lastbrew = time(NULL);
-                        //brew coffee
-                        digitalWrite(relay_pin, HIGH);
-                        write(potRed[1], &potcpy, sizeof(pot));
-                    }
-                }
-            }
+            error("ERROR on accept");
         }
-        else //Parent process
+        bzero(buffer,256);
+        n = read(newsockfd,buffer,255);
+        if (n < 0)
         {
-            pidchild = &childPID;
-            close(fd[0]);
-            close(potRed[1]);
-            while(0 == 0)  //listen for connections
-            {
-
-                listen(sockfd,5);
-                clilen = sizeof(cli_addr);
-                newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-                if (newsockfd < 0)
-                {
-                    error("ERROR on accept");
-                }
-                bzero(buffer,256);
-                n = read(newsockfd,buffer,255);
-                if (n < 0)
-                {
-                    error("ERROR reading from socket");
-                }
-                read(potRed[0], &potinfo, sizeof(pot));
-                char* returnHead = handleHeaders(buffer);
-                n = write(newsockfd,returnHead,strlen(returnHead));
-                if (n < 0) 
-                {
-                    error("ERROR writing to socket");
-                }
-
-                write(fd[1], &potinfo, sizeof(pot));
-            }
+            error("ERROR reading from socket");
         }
+        char* returnHead = handleHeaders(buffer);
+        n = write(newsockfd, returnHead, strlen(returnHead));
+        if (n < 0) 
+        {
+            error("ERROR writing to socket");
+        }
+        close(newsockfd);
     }
-    else // fork failed
-    {
-        error("Fork failed\n");
-    }
-
-    close(newsockfd);
     close(sockfd);
     digitalWrite(led_pin, LOW);
     digitalWrite(button_pin, LOW);

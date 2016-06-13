@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=--std=gnu99
-LDFLAGS=-lwiringPi 
+LDFLAGS=-lwiringPi -pthread
 
 all: coffee htcpcpd
 
